@@ -1,3 +1,4 @@
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
 #include "core/utils.h"
 #include <M5Unified.h>
@@ -6,6 +7,8 @@
 constexpr uint32_t kBtnBDoublePressWindowMs = 270;
 constexpr uint32_t kBtnBLongPressMs = 500;
 
+bool enableNessoGrovePower();
+
 /***************************************************************************************
 ** Function name: _setup_gpio()
 ** Location: main.cpp
@@ -13,6 +16,10 @@ constexpr uint32_t kBtnBLongPressMs = 500;
 ***************************************************************************************/
 void _setup_gpio() {
     M5.begin(); // Need to test if SDCard inits with the new setup
+    // ESP32-C6 only has one general-purpose I2C controller (SOC_HP_I2C_NUM == 1), so
+    // I2C_NUM_1 doesn't exist in i2c_port_t here and M5.In_I2C is always on Wire/I2C_NUM_0.
+    setSysI2CBus(&Wire);
+    enableNessoGrovePower();
     bruceConfig.colorInverted = 0;
     M5.BtnA.setDebounceThresh(8);
     M5.BtnB.setDebounceThresh(8);
@@ -47,7 +54,9 @@ void InputHandler(void) {
     static bool btnBWaitingSecondClick = false;
     static bool btnBLongPressFired = false;
     if (millis() - tm < 200 && !LongPress) return;
+    if (!trylockSysI2CBus()) return; // RFID driver mid-transaction - retry next tick
     M5.update();
+    unlockSysI2CBus();
 
     bool emitNext = false;
     bool emitPrev = false;
